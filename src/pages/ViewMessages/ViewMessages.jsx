@@ -1,0 +1,415 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import Header from '../../components/Header'
+import Stepper from '../../components/Stepper'
+import { useAppContext } from '../../context/AppContext'
+import whatsappService from '../../services/whatsappService'
+import packagesService from '../../services/packagesService'
+
+function ViewMessages() {
+  const navigate = useNavigate()
+  const { excelData, setExcelData } = useAppContext()
+  const [messages, setMessages] = useState([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [messageText, setMessageText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState('')
+  const [subscription, setSubscription] = useState(null)
+  const [loadingSubscription, setLoadingSubscription] = useState(true)
+  const [selectedMessages, setSelectedMessages] = useState([])
+
+  // Load subscription data
+  useEffect(() => {
+    const loadSubscription = async () => {
+      try {
+        setLoadingSubscription(true)
+        const response = await packagesService.getCurrentSubscription()
+        if (response.subscription) {
+          setSubscription(response.subscription)
+        }
+      } catch (err) {
+        console.error('Error loading subscription:', err)
+      } finally {
+        setLoadingSubscription(false)
+      }
+    }
+    loadSubscription()
+  }, [])
+
+  useEffect(() => {
+    if (excelData.length === 0) {
+      navigate('/upload-excel')
+    } else {
+      // Use messages from excelData with their status
+      // If status doesn't exist, mark as pending
+      const messagesWithStatus = excelData.map(msg => ({
+        ...msg,
+        status: msg.status || 'Pending',
+        message: msg.message || messageText, // Use stored message or current textarea
+      }))
+      setMessages(messagesWithStatus)
+      // Select all by default
+      setSelectedMessages(messagesWithStatus.map(msg => msg.id))
+      // If messages already have a message, set it in textarea
+      if (messagesWithStatus[0]?.message && !messageText) {
+        setMessageText(messagesWithStatus[0].message)
+      }
+    }
+  }, [excelData, navigate, messageText])
+
+  const handleSelectAll = () => {
+    const allFilteredSelected = filteredMessages.every(msg => selectedMessages.includes(msg.id))
+    if (allFilteredSelected) {
+      // Deselect all filtered messages
+      setSelectedMessages(selectedMessages.filter(id => !filteredMessages.some(msg => msg.id === id)))
+    } else {
+      // Select all filtered messages
+      const filteredIds = filteredMessages.map(msg => msg.id)
+      setSelectedMessages([...new Set([...selectedMessages, ...filteredIds])])
+    }
+  }
+
+  const handleSelectMessage = (id) => {
+    if (selectedMessages.includes(id)) {
+      setSelectedMessages(selectedMessages.filter(msgId => msgId !== id))
+    } else {
+      setSelectedMessages([...selectedMessages, id])
+    }
+  }
+
+  const handleSendMessages = async () => {
+    if (!messageText.trim()) {
+      setSendError('Please enter a message to send')
+      return
+    }
+
+    if (selectedMessages.length === 0) {
+      setSendError('Please select at least one contact to send messages to')
+      return
+    }
+
+    // Get selected contacts
+    const contactsToSend = messages.filter(msg => selectedMessages.includes(msg.id))
+
+    // Check package limits
+    if (subscription) {
+      if (subscription.messagesRemaining < contactsToSend.length) {
+        setSendError(`You only have ${subscription.messagesRemaining} messages remaining, but you're trying to send ${contactsToSend.length} messages. Please select fewer contacts or upgrade your package.`)
+        return
+      }
+
+      if (messageText.length > subscription.charactersLimit) {
+        setSendError(`Message is too long. Maximum ${subscription.charactersLimit} characters allowed, but your message has ${messageText.length} characters.`)
+        return
+      }
+    }
+
+    // Verify connection before sending
+    try {
+      const status = await whatsappService.getConnectionStatus()
+      if (!status.isConnected) {
+        setSendError('WhatsApp is not connected. Please connect your WhatsApp account first.')
+        setTimeout(() => {
+          navigate('/connect-whatsapp')
+        }, 2000)
+        return
+      }
+    } catch (err) {
+      setSendError('Failed to verify WhatsApp connection. Please reconnect.')
+      return
+    }
+
+    setSending(true)
+    setSendError('')
+
+    try {
+      // Prepare messages to send (only selected ones)
+      const messagesToSend = contactsToSend.map(msg => ({
+        phone: msg.phone,
+        message: messageText,
+        name: msg.name,
+      }))
+
+      // Send messages via API
+      const result = await whatsappService.sendMessages(messagesToSend)
+      
+      // Store results with status (update only selected messages)
+      const messagesWithStatus = messages.map((msg) => {
+        if (selectedMessages.includes(msg.id)) {
+          const resultItem = result.results.find((r, idx) => contactsToSend[idx]?.phone === msg.phone)
+          return {
+            ...msg,
+            message: messageText,
+            status: resultItem?.status === 'success' ? 'Done' : 'Failed',
+            error: resultItem?.error,
+          }
+        }
+        return msg
+      })
+
+      // Update context
+      setExcelData(messagesWithStatus)
+      setMessages(messagesWithStatus)
+      
+      // Show success message
+      const successCount = result.results.filter(r => r.status === 'success').length
+      alert(`Successfully sent ${successCount} out of ${result.results.length} messages`)
+    } catch (err) {
+      setSendError(err.message || 'Failed to send messages')
+      console.error('Error sending messages:', err)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleResend = async (id) => {
+    const messageToResend = messages.find(msg => msg.id === id)
+    if (!messageToResend || !messageToResend.message) return
+
+    // Check package limits
+    if (subscription && subscription.messagesRemaining < 1) {
+      alert('You have no messages remaining. Please upgrade your package.')
+      return
+    }
+
+    try {
+      const result = await whatsappService.sendMessages([{
+        phone: messageToResend.phone,
+        message: messageToResend.message,
+        name: messageToResend.name,
+      }])
+
+      // Update message status
+      const updatedMessages = messages.map(msg => 
+        msg.id === id 
+          ? { ...msg, status: result.results[0]?.status === 'success' ? 'Done' : 'Failed' }
+          : msg
+      )
+      setMessages(updatedMessages)
+      setExcelData(updatedMessages)
+    } catch (err) {
+      console.error('Error resending message:', err)
+      alert('Failed to resend message: ' + (err.message || 'Unknown error'))
+    }
+  }
+
+  const filteredMessages = messages.filter(msg => 
+    msg.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    msg.phone.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  return (
+    <motion.div 
+      className="min-h-screen bg-gray-50"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.8 }}
+    >
+      <Header showUserProfile={true} />
+
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex flex-row gap-8">
+          {/* Left Column - Stepper */}
+          <motion.div 
+            className="flex-1"
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <Stepper activeStep={4} />
+          </motion.div>
+
+          {/* Right Column - Messages Status */}
+          <motion.div 
+            className="flex-1 flex flex-col"
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+          >
+            {/* Header Section */}
+            <motion.div 
+              className="mb-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">
+                Send Messages
+              </h1>
+              <p className="text-gray-600">
+                Select contacts and enter your message to send.
+              </p>
+            </motion.div>
+
+            {/* Message Textarea */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Message Text
+                {subscription && (
+                  <span className="text-gray-500 ml-2">
+                    ({messageText.length} / {subscription.charactersLimit} characters)
+                  </span>
+                )}
+              </label>
+              <textarea
+                value={messageText}
+                onChange={(e) => {
+                  setMessageText(e.target.value)
+                  // Update messages with new text
+                  setMessages(messages.map(msg => ({ ...msg, message: e.target.value })))
+                }}
+                placeholder="Enter your message here..."
+                rows={6}
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1FAF6E] focus:border-transparent resize-none"
+                maxLength={subscription?.charactersLimit || undefined}
+              />
+              {subscription && (
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <span className={`${messageText.length > subscription.charactersLimit ? 'text-red-600' : 'text-gray-600'}`}>
+                    {messageText.length} / {subscription.charactersLimit} characters
+                  </span>
+                  {subscription.messagesRemaining !== undefined && (
+                    <span className="text-gray-600">
+                      {subscription.messagesRemaining} messages remaining
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Error Message */}
+            {sendError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">{sendError}</p>
+              </div>
+            )}
+
+            {/* Send Button */}
+            <div className="mb-6 flex gap-4">
+              <button
+                onClick={() => navigate('/send-messages')}
+                className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-md font-medium hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
+              </button>
+              
+              <button
+                onClick={handleSendMessages}
+                disabled={sending || !messageText.trim() || selectedMessages.length === 0}
+                className="flex-1 bg-[#1FAF6E] text-white px-6 py-3 rounded-md font-medium hover:bg-[#1a8f5a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {sending ? (
+                  <>
+                    <svg className="animate-spin w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Sending...
+                  </>
+                ) : (
+                  `Send to ${selectedMessages.length} Contact${selectedMessages.length !== 1 ? 's' : ''}`
+                )}
+              </button>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex gap-4 mb-6">
+              {/* Search Input */}
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  placeholder="Search contacts"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-4 py-3 pl-10 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1FAF6E] focus:border-transparent"
+                />
+                <svg className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex-1 flex flex-col">
+              <div className="overflow-y-auto flex-1">
+                <table className="w-full">
+                  <thead className="bg-gray-100 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-12">
+                        <input 
+                          type="checkbox" 
+                          className="rounded"
+                          checked={filteredMessages.length > 0 && filteredMessages.every(msg => selectedMessages.includes(msg.id))}
+                          onChange={handleSelectAll}
+                        />
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">ID</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Phone Number</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    <AnimatePresence>
+                      {filteredMessages.map((msg, index) => (
+                        <motion.tr 
+                          key={msg.id} 
+                          className="hover:bg-gray-50"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.8, delay: index * 0.05 }}
+                        >
+                        <td className="px-4 py-3">
+                          <input 
+                            type="checkbox" 
+                            className="rounded"
+                            checked={selectedMessages.includes(msg.id)}
+                            onChange={() => handleSelectMessage(msg.id)}
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{msg.id}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{msg.name}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{msg.phone}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-3 py-1 rounded-md text-sm font-medium text-white ${
+                              msg.status === 'Done' 
+                                ? 'bg-green-500' 
+                                : 'bg-red-400'
+                            }`}>
+                              {msg.status}
+                            </span>
+                            {msg.status === 'Failed' && (
+                              <button 
+                                onClick={() => handleResend(msg.id)}
+                                className="bg-gray-100 text-gray-700 px-3 py-1 rounded-md text-sm border border-gray-300 hover:bg-gray-200 transition-colors flex items-center gap-1"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                Resend
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </motion.tr>
+                      ))}
+                    </AnimatePresence>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+export default ViewMessages
+
