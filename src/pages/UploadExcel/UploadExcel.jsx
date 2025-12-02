@@ -5,6 +5,7 @@ import Header from '../../components/Header'
 import Stepper from '../../components/Stepper'
 import { useAppContext } from '../../context/AppContext'
 import contactsService from '../../services/contactsService'
+import { parseExcelFile } from '../../utils/excelParser'
 import upload_arrow from '../../assets/upload.png'
 
 function UploadExcel() {
@@ -24,18 +25,17 @@ function UploadExcel() {
     setIsLoading(true)
 
     try {
-      // Upload file to backend
-      const result = await contactsService.uploadExcel(file)
+      // Step 1: Parse Excel file in frontend
+      const parseResult = await parseExcelFile(file)
       
-      // Fetch contacts from backend to display
-      const contactsResponse = await contactsService.getAllContacts()
-      const contacts = contactsResponse.contacts || []
+      // Step 2: Send parsed contacts as JSON to backend
+      const result = await contactsService.uploadContacts(parseResult.contacts, null)
       
       // Format contacts for display (matching the expected format)
-      const formattedContacts = contacts.map((contact, index) => ({
-        id: contact.id || index + 1,
-        name: contact.name,
-        phone: contact.phone,
+      const formattedContacts = parseResult.contacts.map((c, i) => ({
+        id: `temp-${i}`,
+        name: c.name,
+        phone: c.phone,
       }))
 
       setExcelData(formattedContacts)
@@ -46,7 +46,8 @@ function UploadExcel() {
         `✓ File "${file.name}" uploaded successfully! ` +
         `Imported ${stats.imported || formattedContacts.length} contacts. ` +
         (stats.duplicates > 0 ? `${stats.duplicates} duplicates skipped. ` : '') +
-        (stats.errors > 0 ? `${stats.errors} errors. ` : '')
+        (stats.errors > 0 ? `${stats.errors} errors. ` : '') +
+        (parseResult.errors && parseResult.errors.length > 0 ? ` (${parseResult.errors.length} parsing errors)` : '')
       )
       
       // Navigate to next step after a short delay
@@ -54,7 +55,8 @@ function UploadExcel() {
         navigate('/send-messages')
       }, 2000)
     } catch (err) {
-      setError(err.message || 'Failed to upload Excel file. Please try again.')
+      setError(err.message || 'Failed to process Excel file. Please try again.')
+      console.error('Error processing file:', err)
     } finally {
       setIsLoading(false)
     }

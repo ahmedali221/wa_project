@@ -2,24 +2,25 @@ import api from './axios';
 
 const contactsService = {
   /**
-   * Upload Excel file and save contacts to database
-   * @param {File} file - Excel file (.xlsx, .xls, or .csv)
+   * Upload parsed contacts data to database
+   * @param {Array<{name: string, phone: string, email?: string}>} contacts - Array of contact objects
    * @param {string} groupName - Optional group name for contacts
+   * @param {Object} options - Optional request options (signal, etc.)
    * @returns {Promise} Response with statistics and imported contacts
    */
-  async uploadExcel(file, groupName) {
+  async uploadContacts(contacts, groupName, options = {}) {
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (groupName) {
-        formData.append('groupName', groupName);
-      }
-
-      const response = await api.post('/contacts/upload-excel', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
+      const response = await api.post(
+        '/contacts/upload-contacts',
+        {
+          contacts,
+          groupName,
         },
-      });
+        {
+          timeout: 120000, // 2 minutes timeout
+          ...options,
+        }
+      );
       return response.data;
     } catch (error) {
       throw this.handleError(error);
