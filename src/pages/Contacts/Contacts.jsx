@@ -6,6 +6,7 @@ import Footer from '../../components/Footer'
 import Sidebar from '../../components/Sidebar'
 import contactsService from '../../services/contactsService'
 import messagesService from '../../services/messagesService'
+import { parseExcelFile } from '../../utils/excelParser'
 
 function Contacts() {
   const navigate = useNavigate()
@@ -21,11 +22,47 @@ function Contacts() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [newContact, setNewContact] = useState({ name: '', phone: '', email: '' })
   const [statistics, setStatistics] = useState({ total: 0, sent: 0, failed: 0, pending: 0 })
+  const [uploadedFileName, setUploadedFileName] = useState(null)
+  const [hasUploadedFromExcelStep, setHasUploadedFromExcelStep] = useState(false)
 
   useEffect(() => {
     fetchContacts()
     fetchStatistics()
+    checkUploadStatus()
+    // Check for previously uploaded file name
+    const storedFileName = localStorage.getItem('lastUploadedFileName')
+    if (storedFileName) {
+      setUploadedFileName(storedFileName)
+    }
   }, [])
+
+  const checkUploadStatus = async () => {
+    try {
+      const status = await contactsService.getUploadStatus()
+      if (status.hasUploaded && status.contactsCount > 0) {
+        // Check if uploaded from UploadExcel step by checking localStorage
+        const excelUploadedOnce = localStorage.getItem('excelUploadedOnce') === 'true'
+        const lastUploadedFileName = localStorage.getItem('lastUploadedFileName')
+        
+        // Only set hasUploadedFromExcelStep if it was uploaded from UploadExcel step
+        // (indicated by excelUploadedOnce flag and lastUploadedFileName)
+        const uploadedFromExcelStep = excelUploadedOnce && lastUploadedFileName
+        setHasUploadedFromExcelStep(uploadedFromExcelStep)
+        
+        // User has uploaded - show info message
+        if (uploadedFromExcelStep) {
+          setSuccessMessage(`You have ${status.contactsCount} contacts. You can only add new contacts manually from the table below.`)
+        } else {
+          setSuccessMessage(`You have ${status.contactsCount} contacts. You can upload a new Excel file which will replace all existing contacts.`)
+        }
+      } else {
+        setHasUploadedFromExcelStep(false)
+        setSuccessMessage('')
+      }
+    } catch (err) {
+      console.error('Error checking upload status:', err)
+    }
+  }
 
   const fetchContacts = async () => {
     try {
@@ -82,7 +119,13 @@ function Contacts() {
   const handleSaveEdit = async (id) => {
     try {
       setError('')
-      await contactsService.updateContact(id, editForm)
+      // Remove email if empty string
+      const contactData = {
+        name: editForm.name.trim(),
+        phone: editForm.phone.trim(),
+        ...(editForm.email?.trim() ? { email: editForm.email.trim() } : {})
+      }
+      await contactsService.updateContact(id, contactData)
       await fetchContacts()
       setEditingContact(null)
       setEditForm({ name: '', phone: '', email: '' })
@@ -99,8 +142,18 @@ function Contacts() {
     try {
       setError('')
       await contactsService.deleteContact(id)
-      await fetchContacts()
       setSelectedContacts(selectedContacts.filter(cId => cId !== id))
+      await fetchContacts()
+      
+      // Check if all contacts are deleted after refresh
+      const response = await contactsService.getAllContacts()
+      if (response.contacts.length === 0) {
+        localStorage.removeItem('lastUploadedFileName')
+        setUploadedFileName(null)
+        setHasUploadedFromExcelStep(false)
+        // Refresh upload status
+        await checkUploadStatus()
+      }
     } catch (err) {
       setError(err.message || 'Failed to delete contact')
     }
@@ -131,7 +184,13 @@ function Contacts() {
     try {
       setError('')
       setSuccessMessage('')
-      await contactsService.createContact(newContact)
+      // Remove email if empty string
+      const contactData = {
+        name: newContact.name.trim(),
+        phone: newContact.phone.trim(),
+        ...(newContact.email?.trim() ? { email: newContact.email.trim() } : {})
+      }
+      await contactsService.createContact(contactData)
       await fetchContacts()
       setNewContact({ name: '', phone: '', email: '' })
       setShowAddForm(false)
@@ -155,26 +214,71 @@ function Contacts() {
     const file = event.target.files?.[0]
     if (!file) return
 
+    // Prevent upload if already uploaded from UploadExcel step
+    if (hasUploadedFromExcelStep) {
+      setError('You have already uploaded an Excel file in the Upload Excel step. You cannot upload another file. You can add contacts manually using the "Add New Contact" button.')
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      return
+    }
+
+    // Check with backend if user has contacts
+    try {
+      const status = await contactsService.getUploadStatus()
+      if (status.hasUploaded) {
+        // User has uploaded - show warning but allow upload (will replace)
+        const confirmUpload = window.confirm(
+          `You have ${status.contactsCount} contacts.\n\n` +
+          `Uploading a new file will DELETE all existing contacts and replace them with the new ones.\n\n` +
+          `Do you want to continue?`
+        )
+        if (!confirmUpload) {
+          if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+          }
+          return
+        }
+      }
+    } catch (err) {
+      console.error('Error checking upload status:', err)
+    }
+
     setError('')
     setSuccessMessage('')
     setUploading(true)
 
     try {
-      // Delete all existing contacts first
+      // Step 1: Parse Excel file in frontend
+      const parseResult = await parseExcelFile(file)
+      
+      // Step 2: Delete all existing contacts first (optional - you can change this to append instead)
       await contactsService.deleteAllContacts()
       
-      // Upload new Excel file
-      const result = await contactsService.uploadExcel(file)
+      // Step 3: Send parsed contacts as JSON to backend
+      const result = await contactsService.uploadContacts(parseResult.contacts, null)
       
       // Refresh contacts list
       await fetchContacts()
+      
+      // Store uploaded file name in localStorage
+      localStorage.setItem('lastUploadedFileName', file.name)
+      // Clear the excelUploadedOnce flag since this upload is from Contacts page
+      localStorage.removeItem('excelUploadedOnce')
+      setUploadedFileName(file.name)
+      
+      // Refresh upload status
+      await checkUploadStatus()
+      // Note: This upload is from Contacts page, not from UploadExcel step
+      // So we don't set hasUploadedFromExcelStep to true
       
       const stats = result.statistics || {}
       setSuccessMessage(
         `Excel file uploaded successfully! ` +
         `Imported ${stats.imported || 0} contacts. ` +
         (stats.duplicates > 0 ? `${stats.duplicates} duplicates skipped. ` : '') +
-        (stats.errors > 0 ? `${stats.errors} errors. ` : '')
+        (stats.errors > 0 ? `${stats.errors} errors. ` : '') +
+        (parseResult.errors && parseResult.errors.length > 0 ? ` (${parseResult.errors.length} parsing errors)` : '')
       )
       
       // Clear file input
@@ -205,33 +309,49 @@ function Contacts() {
             transition={{ duration: 0.5 }}
           >
             <div className="flex justify-between items-center mb-6">
-              <h1 className="text-2xl font-bold text-gray-800">Contacts</h1>
-              <motion.button
-                onClick={handleReuploadExcel}
-                disabled={uploading}
-                className={`bg-[#1FAF6E] text-white px-6 py-2 rounded-md font-medium hover:bg-[#1a8f5a] transition-colors flex items-center gap-2 ${
-                  uploading ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-                whileHover={!uploading ? { scale: 1.02 } : {}}
-                whileTap={!uploading ? { scale: 0.98 } : {}}
-              >
-                {uploading ? (
-                  <>
-                    <svg className="animate-spin w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    Re-upload Excel
-                  </>
+              <div className="flex-1">
+                <h1 className="text-2xl font-bold text-gray-800 mr-4">Contacts</h1>
+              </div>
+              <div className="flex items-center gap-6">
+                <motion.button
+                  onClick={handleReuploadExcel}
+                  disabled={uploading || hasUploadedFromExcelStep}
+                  className={`bg-[#1FAF6E] text-white px-6 py-2 rounded-md font-medium hover:bg-[#1a8f5a] transition-colors flex items-center gap-2 ${
+                    uploading || hasUploadedFromExcelStep ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                  whileHover={!uploading && !hasUploadedFromExcelStep ? { scale: 1.02 } : {}}
+                  whileTap={!uploading && !hasUploadedFromExcelStep ? { scale: 0.98 } : {}}
+                >
+                  {uploading ? (
+                    <>
+                      <svg className="animate-spin w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      {uploadedFileName ? 'Re-upload Excel' : 'Upload Excel'}
+                    </>
+                  )}
+                </motion.button>
+                {hasUploadedFromExcelStep && (
+                  <div className="px-4 py-2 bg-green-50 border border-green-200 rounded-md">
+                    <div className="flex items-center gap-3">
+                      <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <p className="text-sm text-green-800">
+                        <strong>Excel already uploaded.</strong> You can only add new contacts manually from the table below.
+                      </p>
+                    </div>
+                  </div>
                 )}
-              </motion.button>
+              </div>
             </div>
 
             {/* Hidden File Input */}
@@ -240,6 +360,7 @@ function Contacts() {
               type="file"
               accept=".xlsx,.xls,.csv"
               onChange={handleFileUpload}
+              disabled={hasUploadedFromExcelStep}
               className="hidden"
             />
 
@@ -326,13 +447,13 @@ function Contacts() {
               <div className="flex justify-center items-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
               </div>
-            ) : contacts.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-500 text-lg">No contacts found</p>
-                <p className="text-gray-400 mt-2">Upload an Excel file to add contacts</p>
-              </div>
             ) : (
               <div className="overflow-hidden">
+                {contacts.length === 0 && (
+                  <div className="text-center py-6 mb-4">
+                    <p className="text-gray-500 text-sm">No contacts yet. Add contacts manually or upload an Excel file.</p>
+                  </div>
+                )}
                 <table className="w-full">
                   <thead className="bg-gray-100">
                     <tr>

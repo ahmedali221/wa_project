@@ -6,6 +6,7 @@ import Stepper from '../../components/Stepper'
 import { useAppContext } from '../../context/AppContext'
 import whatsappService from '../../services/whatsappService'
 import authService from '../../services/authService'
+import contactsService from '../../services/contactsService'
 import scan_qr from '../../assets/scan_qr.png'
 import qr from '../../assets/qr.png'
 
@@ -77,10 +78,27 @@ function ConnectWhatsApp() {
             console.error('Error updating user data:', err)
           }
           
-          // Navigate to next step after a short delay
-          setTimeout(() => {
-            navigate('/upload-excel')
-          }, 2000)
+          // Check if user has already uploaded Excel, if yes skip to send messages
+          try {
+            const uploadStatus = await contactsService.getUploadStatus()
+            if (uploadStatus.hasUploaded && uploadStatus.contactsCount > 0) {
+              // User already uploaded Excel, skip to send messages step
+              setTimeout(() => {
+                navigate('/send-messages')
+              }, 2000)
+            } else {
+              // User hasn't uploaded Excel yet, go to upload step
+              setTimeout(() => {
+                navigate('/upload-excel')
+              }, 2000)
+            }
+          } catch (err) {
+            console.error('Error checking upload status:', err)
+            // Default to upload step if check fails
+            setTimeout(() => {
+              navigate('/upload-excel')
+            }, 2000)
+          }
         }
       } catch (err) {
         console.error('Error checking status:', err)
@@ -118,20 +136,34 @@ function ConnectWhatsApp() {
     }
   }
 
-  const handleKeepExistingPhoneNumber = () => {
+  const handleKeepExistingPhoneNumber = async () => {
     setShowPhoneNumberDialog(false)
     // Check if already connected
-    whatsappService.getConnectionStatus()
-      .then(statusData => {
-        if (statusData.isConnected && statusData.phoneNumber) {
-          setWhatsappConnected(true)
-          setWhatsappPhoneNumber(statusData.phoneNumber)
+    try {
+      const statusData = await whatsappService.getConnectionStatus()
+      if (statusData.isConnected && statusData.phoneNumber) {
+        setWhatsappConnected(true)
+        setWhatsappPhoneNumber(statusData.phoneNumber)
+        
+        // Check if user has already uploaded Excel, if yes skip to send messages
+        try {
+          const uploadStatus = await contactsService.getUploadStatus()
+          if (uploadStatus.hasUploaded && uploadStatus.contactsCount > 0) {
+            // User already uploaded Excel, skip to send messages step
+            navigate('/send-messages')
+          } else {
+            // User hasn't uploaded Excel yet, go to upload step
+            navigate('/upload-excel')
+          }
+        } catch (err) {
+          console.error('Error checking upload status:', err)
+          // Default to upload step if check fails
           navigate('/upload-excel')
         }
-      })
-      .catch(err => {
-        console.error('Error checking connection status:', err)
-      })
+      }
+    } catch (err) {
+      console.error('Error checking connection status:', err)
+    }
   }
 
   const handleMethodSelection = async (method) => {

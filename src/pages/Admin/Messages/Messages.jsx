@@ -130,7 +130,7 @@ function AdminMessages() {
             >
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Message Statistics</h2>
               <p className="text-gray-500">
-                This page shows an overview of all messages sent through the WA Sender platform.
+                This page shows an overview of all messages sent through the adpilot platform.
                 Detailed message logs and analytics can be accessed through the dashboard.
               </p>
               <div className="mt-6 p-4 bg-gray-50 rounded-lg">
@@ -154,6 +154,8 @@ function AdminMessages() {
 }
 
 export default AdminMessages
+
+
 
 
 

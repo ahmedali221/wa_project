@@ -112,7 +112,7 @@ function Payment() {
               <div className="flex justify-between items-center">
                 <span className="text-lg font-semibold text-black">Total</span>
                 <span className="text-2xl font-bold text-[#1FAF6E]">
-                  {selectedPackage.currency === 'EGP' ? 'EGP' : '$'}{selectedPackage.price}
+                  ${selectedPackage.price}
                 </span>
               </div>
             </div>

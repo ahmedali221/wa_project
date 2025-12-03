@@ -54,7 +54,7 @@ function Header({ showUserProfile = false }) {
             whileHover={{ scale: 1.05 }}
             transition={{ type: "spring", stiffness: 300 }}
           >
-            Logo
+            adpilot
           </motion.div>
         </Link>
         

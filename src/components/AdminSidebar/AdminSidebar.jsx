@@ -64,8 +64,8 @@ function AdminSidebar() {
       {/* Logo */}
       <div className="p-6 pb-8">
         <h1 className="text-2xl font-bold italic">
-          <span className="text-gray-800">Log</span>
-          <span className="text-[#1FAF6E]">o</span>
+          <span className="text-gray-800">ad</span>
+          <span className="text-[#1FAF6E]">pilot</span>
         </h1>
       </div>
       
@@ -108,6 +108,8 @@ function AdminSidebar() {
 }
 
 export default AdminSidebar
+
+
 
 
 

@@ -11,6 +11,11 @@ function SendMessages() {
   const navigate = useNavigate()
   const { excelData, whatsappConnected, setExcelData } = useAppContext()
   const [loading, setLoading] = useState(false)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newContact, setNewContact] = useState({ name: '', phone: '', email: '' })
+  const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+  const [hasUploadedExcel, setHasUploadedExcel] = useState(false)
 
   useEffect(() => {
     // If no data in context, try to fetch from backend
@@ -18,6 +23,10 @@ function SendMessages() {
       if (excelData.length === 0) {
         setLoading(true)
         try {
+          // Check upload status first
+          const uploadStatus = await contactsService.getUploadStatus()
+          setHasUploadedExcel(uploadStatus.hasUploaded)
+          
           const response = await contactsService.getAllContacts()
           const contacts = response.contacts || []
           
@@ -40,6 +49,13 @@ function SendMessages() {
         } finally {
           setLoading(false)
         }
+      } else {
+        // Check upload status even if we have data in context
+        contactsService.getUploadStatus().then(status => {
+          setHasUploadedExcel(status.hasUploaded)
+        }).catch(err => {
+          console.error('Error checking upload status:', err)
+        })
       }
     }
 
@@ -50,7 +66,42 @@ function SendMessages() {
     }
   }, [excelData, whatsappConnected, navigate, setExcelData])
 
+  const handleAddContact = async () => {
+    if (!newContact.name.trim() || !newContact.phone.trim()) {
+      setError('Name and Phone are required')
+      return
+    }
 
+    try {
+      setError('')
+      setSuccessMessage('')
+      // Remove email if empty string
+      const contactData = {
+        name: newContact.name.trim(),
+        phone: newContact.phone.trim(),
+        ...(newContact.email?.trim() ? { email: newContact.email.trim() } : {})
+      }
+      await contactsService.createContact(contactData)
+      
+      // Refresh contacts list
+      const response = await contactsService.getAllContacts()
+      const contacts = response.contacts || []
+      
+      // Format contacts for display
+      const formattedContacts = contacts.map((contact, index) => ({
+        id: contact.id || index + 1,
+        name: contact.name,
+        phone: contact.phone,
+      }))
+      
+      setExcelData(formattedContacts)
+      setNewContact({ name: '', phone: '', email: '' })
+      setShowAddForm(false)
+      setSuccessMessage('Contact added successfully')
+    } catch (err) {
+      setError(err.message || 'Failed to add contact')
+    }
+  }
 
   return (
     <motion.div 
@@ -138,7 +189,70 @@ function SendMessages() {
                 Review the contacts from your Excel file.
               </p>
 
+              {/* Warning Message - Excel cannot be uploaded in step 3 */}
+              {hasUploadedExcel && (
+                <motion.div 
+                  className="mt-4 mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg max-w-md w-full mx-auto"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8 }}
+                >
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-semibold text-yellow-800 mb-1">Note</p>
+                      <p className="text-sm text-yellow-700">
+                        You cannot upload or modify Excel files in this step. To manage contacts, go back to the Contacts page.
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
             </motion.div>
+
+            {/* Error Message */}
+            {error && (
+              <motion.div
+                className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md w-full mx-auto"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <p className="text-sm text-red-700">{error}</p>
+              </motion.div>
+            )}
+
+            {/* Success Message */}
+            {successMessage && (
+              <motion.div
+                className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg max-w-md w-full mx-auto"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <p className="text-sm text-green-700">{successMessage}</p>
+              </motion.div>
+            )}
+
+            {/* Add Contact Button */}
+            <div className="mb-4 flex justify-end">
+              {!showAddForm && (
+                <motion.button
+                  onClick={() => setShowAddForm(true)}
+                  className="bg-[#1FAF6E] text-white px-4 py-2 rounded-md font-medium hover:bg-[#1a8f5a] transition-colors flex items-center gap-2 text-sm"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add New Contact
+                </motion.button>
+              )}
+            </div>
 
             {/* Table */}
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex-1 flex flex-col">
@@ -152,6 +266,53 @@ function SendMessages() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
+                    {/* Add New Contact Row */}
+                    {showAddForm && (
+                      <motion.tr
+                        className="bg-green-50"
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">New</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <input
+                            type="text"
+                            placeholder="Name *"
+                            value={newContact.name}
+                            onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1FAF6E] text-sm"
+                          />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Phone *"
+                              value={newContact.phone}
+                              onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1FAF6E] text-sm"
+                            />
+                            <button
+                              onClick={handleAddContact}
+                              className="text-[#1FAF6E] hover:text-[#1a8f5a] font-medium px-3"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowAddForm(false)
+                                setNewContact({ name: '', phone: '', email: '' })
+                                setError('')
+                              }}
+                              className="text-gray-600 hover:text-gray-900 px-3"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    )}
                     <AnimatePresence>
                       {excelData.map((msg, index) => (
                         <motion.tr 
@@ -181,7 +342,15 @@ function SendMessages() {
               transition={{ duration: 1.0, delay: 0.6 }}
             >
               <motion.button 
-                onClick={() => navigate('/upload-excel')}
+                onClick={() => {
+                  // If user already uploaded Excel, go back to upload-excel page
+                  // Otherwise, go back to connect-whatsapp
+                  if (hasUploadedExcel) {
+                    navigate('/upload-excel')
+                  } else {
+                    navigate('/connect-whatsapp')
+                  }
+                }}
                 className="bg-gray-100 text-gray-700 px-8 py-4 rounded-md font-medium hover:bg-gray-200 transition-colors flex items-center gap-2"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}

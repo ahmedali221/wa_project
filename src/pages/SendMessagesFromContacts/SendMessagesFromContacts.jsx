@@ -5,6 +5,7 @@ import Header from '../../components/Header'
 import Sidebar from '../../components/Sidebar'
 import whatsappService from '../../services/whatsappService'
 import packagesService from '../../services/packagesService'
+import contactsService from '../../services/contactsService'
 
 function SendMessagesFromContacts() {
   const navigate = useNavigate()
@@ -17,6 +18,8 @@ function SendMessagesFromContacts() {
   const [subscription, setSubscription] = useState(null)
   const [loadingSubscription, setLoadingSubscription] = useState(true)
   const [selectedContacts, setSelectedContacts] = useState([])
+  const [showCampaignOptions, setShowCampaignOptions] = useState(false)
+  const [campaignResult, setCampaignResult] = useState(null)
 
   // Load subscription data
   useEffect(() => {
@@ -37,24 +40,53 @@ function SendMessagesFromContacts() {
   }, [])
 
   useEffect(() => {
-    // Get contacts from location state
+    // Get contacts from location state or fetch all contacts
     const contactsFromState = location.state?.contacts || []
-    if (contactsFromState.length === 0) {
-      navigate('/contacts')
-      return
+    
+    if (contactsFromState.length > 0) {
+      // Format contacts for display
+      const formattedContacts = contactsFromState.map((contact, index) => ({
+        id: contact.id || index + 1,
+        name: contact.name,
+        phone: contact.phone,
+        email: contact.email,
+      }))
+
+      setContacts(formattedContacts)
+      // Select all by default
+      setSelectedContacts(formattedContacts.map(c => c.id))
+    } else {
+      // No contacts in state, fetch all contacts from backend
+      const fetchAllContacts = async () => {
+        try {
+          const response = await contactsService.getAllContacts()
+          const allContacts = response.contacts || []
+          
+          if (allContacts.length === 0) {
+            // No contacts at all, redirect to contacts page
+            navigate('/contacts')
+            return
+          }
+
+          // Format contacts for display
+          const formattedContacts = allContacts.map((contact, index) => ({
+            id: contact.id || index + 1,
+            name: contact.name,
+            phone: contact.phone,
+            email: contact.email,
+          }))
+
+          setContacts(formattedContacts)
+          // Select all by default
+          setSelectedContacts(formattedContacts.map(c => c.id))
+        } catch (err) {
+          console.error('Error fetching contacts:', err)
+          navigate('/contacts')
+        }
+      }
+      
+      fetchAllContacts()
     }
-
-    // Format contacts for display
-    const formattedContacts = contactsFromState.map((contact, index) => ({
-      id: contact.id || index + 1,
-      name: contact.name,
-      phone: contact.phone,
-      email: contact.email,
-    }))
-
-    setContacts(formattedContacts)
-    // Select all by default
-    setSelectedContacts(formattedContacts.map(c => c.id))
   }, [location.state, navigate])
 
   const handleSelectAll = () => {
@@ -133,18 +165,43 @@ function SendMessagesFromContacts() {
       // Send messages via API
       const result = await whatsappService.sendMessages(messagesToSend)
       
-      // Show success message
+      // Show success message and options for next campaign
       const successCount = result.results.filter(r => r.status === 'success').length
-      alert(`Successfully sent ${successCount} out of ${result.results.length} messages`)
+      const totalSent = result.results.length
       
-      // Navigate back to contacts page
-      navigate('/contacts')
+      // Store success data and show campaign options
+      setCampaignResult({
+        successCount,
+        totalSent,
+        contacts: contactsToSend
+      })
+      setShowCampaignOptions(true)
+      setSendError('') // Clear any errors
     } catch (err) {
       setSendError(err.message || 'Failed to send messages')
       console.error('Error sending messages:', err)
     } finally {
       setSending(false)
     }
+  }
+
+  const handleConfirmNumbers = () => {
+    // Keep current contacts and compose new message
+    setMessageText('') // Clear message
+    setShowCampaignOptions(false)
+    // Contacts are already in state, just reset message
+  }
+
+  const handleKeepCurrent = () => {
+    // Keep current contacts and compose new message (same as confirm)
+    setMessageText('') // Clear message
+    setShowCampaignOptions(false)
+    // Contacts are already in state, just reset message
+  }
+
+  const handleGoToContacts = () => {
+    // Navigate back to contacts page
+    navigate('/contacts')
   }
 
   const filteredContacts = contacts.filter(c => 
@@ -226,6 +283,74 @@ function SendMessagesFromContacts() {
                 <p className="text-sm text-red-700">{sendError}</p>
               </div>
             )}
+
+            {/* Campaign Success Modal */}
+            <AnimatePresence>
+              {showCampaignOptions && campaignResult && (
+                <motion.div
+                  className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowCampaignOptions(false)}
+                >
+                  <motion.div
+                    className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="text-center mb-6">
+                      <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                        <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                        Messages Sent Successfully!
+                      </h3>
+                      <p className="text-gray-600">
+                        Successfully sent <span className="font-bold text-green-600">{campaignResult.successCount}</span> out of <span className="font-bold">{campaignResult.totalSent}</span> messages.
+                      </p>
+                    </div>
+
+                    <div className="space-y-3 mb-6">
+                      <motion.button
+                        onClick={handleConfirmNumbers}
+                        className="w-full bg-[#1FAF6E] text-white px-6 py-3 rounded-md font-medium hover:bg-[#1a8f5a] transition-colors flex items-center justify-center gap-2"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Confirm Numbers & Compose New Message
+                      </motion.button>
+
+                      <motion.button
+                        onClick={handleKeepCurrent}
+                        className="w-full bg-green-50 text-[#1FAF6E] border-2 border-[#1FAF6E] px-6 py-3 rounded-md font-medium hover:bg-green-100 transition-colors flex items-center justify-center gap-2"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                        </svg>
+                        Keep Current & Compose New Message
+                      </motion.button>
+                    </div>
+
+                    <button
+                      onClick={handleGoToContacts}
+                      className="w-full text-gray-600 hover:text-gray-800 text-sm font-medium py-2"
+                    >
+                      Go Back to Contacts
+                    </button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Send Button */}
             <div className="mb-6 flex gap-4">

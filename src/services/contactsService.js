@@ -2,6 +2,19 @@ import api from './axios';
 
 const contactsService = {
   /**
+   * Get upload status (check if user has already uploaded contacts)
+   * @returns {Promise} Response with hasUploaded and contactsCount
+   */
+  async getUploadStatus() {
+    try {
+      const response = await api.get('/contacts/upload-status');
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  },
+
+  /**
    * Upload parsed contacts data to database
    * @param {Array<{name: string, phone: string, email?: string}>} contacts - Array of contact objects
    * @param {string} groupName - Optional group name for contacts

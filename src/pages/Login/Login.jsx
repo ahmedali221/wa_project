@@ -46,7 +46,7 @@ function Login() {
     <div className="min-h-screen bg-white flex items-center justify-center">
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 flex justify-between items-center p-6">
-        <div className="text-[#1FAF6E] text-2xl font-bold">Logo</div>
+        <div className="text-[#1FAF6E] text-2xl font-bold">adpilot</div>
         <div className="text-gray-600">
           Don't have an account?{' '}
           <Link to="/signup" className="text-[#1FAF6E] hover:text-[#1FAF6E]">

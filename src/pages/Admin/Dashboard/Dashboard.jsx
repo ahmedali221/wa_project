@@ -83,7 +83,7 @@ function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">
-              Welcome to <span className="text-[#1FAF6E]">WA Sender</span>
+              Welcome to <span className="text-[#1FAF6E]">adpilot</span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">
               Track the delivery status of your WhatsApp messages
@@ -340,6 +340,8 @@ function Dashboard() {
 }
 
 export default Dashboard
+
+
 
 
 

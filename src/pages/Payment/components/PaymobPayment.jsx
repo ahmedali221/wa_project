@@ -195,7 +195,7 @@ function PaymobPayment({ packageData, onPaymentSuccess, onPaymentError }) {
             whileHover={{ scale: loading ? 1 : 1.02 }}
             whileTap={{ scale: loading ? 1 : 0.98 }}
           >
-            {loading ? 'Processing...' : `Pay ${packageData.currency === 'EGP' ? 'EGP' : '$'}${packageData.price}`}
+            {loading ? 'Processing...' : `Pay $${packageData.price}`}
           </motion.button>
         </div>
 

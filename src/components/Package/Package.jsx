@@ -12,7 +12,7 @@ function Package({ pkg, onSelect, variants }) {
       <div className="text-center mb-6">
         <h3 className="text-2xl font-bold text-black mb-2">{pkg.name}</h3>
         <div className="text-4xl font-bold text-[#1FAF6E] mb-1">
-          {pkg.currency === 'EGP' ? 'EGP' : '$'}{pkg.price}
+          ${pkg.price}
         </div>
         <p className="text-sm text-gray-500">
           {pkg.durationDays ? `per ${pkg.durationDays === 30 ? 'month' : pkg.durationDays === 7 ? 'week' : `${pkg.durationDays} days`}` : 'per month'}

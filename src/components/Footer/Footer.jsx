@@ -20,7 +20,7 @@ function Footer() {
               whileHover={{ scale: 1.05 }}
               transition={{ type: "spring", stiffness: 300 }}
             >
-              Logo
+              adpilot
             </motion.div>
             <p className="text-gray-600 mb-4 max-w-md">
               Send bulk WhatsApp messages efficiently and manage your contacts with ease. 
@@ -132,7 +132,7 @@ function Footer() {
         {/* Bottom Bar */}
         <div className="mt-8 pt-8 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center">
           <p className="text-gray-600 text-sm">
-            © {currentYear} Logo. All rights reserved.
+            © {currentYear} adpilot. All rights reserved.
           </p>
           <div className="flex gap-6 mt-4 md:mt-0">
             <Link to="/privacy" className="text-gray-600 hover:text-[#1FAF6E] text-sm transition-colors">

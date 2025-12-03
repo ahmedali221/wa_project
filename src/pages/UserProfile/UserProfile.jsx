@@ -158,7 +158,7 @@ function UserProfile() {
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome to <span className="text-[#1FAF6E]">WA Sender</span>
+            Welcome to <span className="text-[#1FAF6E]">adpilot</span>
           </h1>
           <p className="text-gray-600">Track the delivery status of your WhatsApp messages.</p>
         </div>
