@@ -20,6 +20,8 @@ function SendMessagesFromContacts() {
   const [selectedContacts, setSelectedContacts] = useState([])
   const [showCampaignOptions, setShowCampaignOptions] = useState(false)
   const [campaignResult, setCampaignResult] = useState(null)
+  const [showSimplePopup, setShowSimplePopup] = useState(false)
+  const [simplePopupMessage, setSimplePopupMessage] = useState('')
 
   // Load subscription data
   useEffect(() => {
@@ -169,13 +171,23 @@ function SendMessagesFromContacts() {
       const successCount = result.results.filter(r => r.status === 'success').length
       const totalSent = result.results.length
       
-      // Store success data and show campaign options
-      setCampaignResult({
-        successCount,
-        totalSent,
-        contacts: contactsToSend
-      })
-      setShowCampaignOptions(true)
+      // Check if this is from campaign flow or from excel upload
+      const fromCampaign = location.state?.fromCampaign
+      const fromExcelUpload = location.state?.fromExcelUpload
+      
+      if (fromCampaign || fromExcelUpload) {
+        // Show simple popup for campaign/excel flow
+        setSimplePopupMessage(`${successCount} message${successCount !== 1 ? 's' : ''} of ${totalSent} sent`)
+        setShowSimplePopup(true)
+      } else {
+        // Show full campaign options for regular flow
+        setCampaignResult({
+          successCount,
+          totalSent,
+          contacts: contactsToSend
+        })
+        setShowCampaignOptions(true)
+      }
       setSendError('') // Clear any errors
     } catch (err) {
       setSendError(err.message || 'Failed to send messages')
@@ -202,6 +214,20 @@ function SendMessagesFromContacts() {
   const handleGoToContacts = () => {
     // Navigate back to contacts page
     navigate('/contacts')
+  }
+
+  const handleSimplePopupOK = () => {
+    setShowSimplePopup(false)
+    const fromCampaign = location.state?.fromCampaign
+    const fromExcelUpload = location.state?.fromExcelUpload
+    
+    if (fromCampaign) {
+      // Redirect to profile (dashboard) for campaign flow
+      navigate('/profile')
+    } else if (fromExcelUpload) {
+      // Redirect to messages tab for excel upload flow
+      navigate('/messages')
+    }
   }
 
   const filteredContacts = contacts.filter(c => 
@@ -283,6 +309,50 @@ function SendMessagesFromContacts() {
                 <p className="text-sm text-red-700">{sendError}</p>
               </div>
             )}
+
+            {/* Simple Popup for Campaign/Excel Flow */}
+            <AnimatePresence>
+              {showSimplePopup && (
+                <motion.div
+                  className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={handleSimplePopupOK}
+                >
+                  <motion.div
+                    className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="text-center mb-6">
+                      <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                        <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                        Messages Sent!
+                      </h3>
+                      <p className="text-gray-600">
+                        {simplePopupMessage}
+                      </p>
+                    </div>
+
+                    <motion.button
+                      onClick={handleSimplePopupOK}
+                      className="w-full bg-[#1FAF6E] text-white px-6 py-3 rounded-md font-medium hover:bg-[#1a8f5a] transition-colors"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      OK
+                    </motion.button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Campaign Success Modal */}
             <AnimatePresence>

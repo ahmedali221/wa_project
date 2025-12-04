@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Header from '../../components/Header'
 import Stepper from '../../components/Stepper'
@@ -12,6 +12,7 @@ import qr from '../../assets/qr.png'
 
 function ConnectWhatsApp() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { setWhatsappConnected, setWhatsappPhoneNumber } = useAppContext()
   
   const [connectionMethod, setConnectionMethod] = useState(null) // 'qr' or 'pairing'
@@ -81,22 +82,28 @@ function ConnectWhatsApp() {
           // Check if user has already uploaded Excel, if yes skip to send messages
           try {
             const uploadStatus = await contactsService.getUploadStatus()
+            const returnTo = location.state?.returnTo
             if (uploadStatus.hasUploaded && uploadStatus.contactsCount > 0) {
               // User already uploaded Excel, skip to send messages step
               setTimeout(() => {
-                navigate('/send-messages')
+                if (returnTo === 'campaign') {
+                  navigate('/send-messages-from-contacts', { state: { fromCampaign: true } })
+                } else {
+                  navigate('/send-messages')
+                }
               }, 2000)
             } else {
               // User hasn't uploaded Excel yet, go to upload step
               setTimeout(() => {
-                navigate('/upload-excel')
+                navigate('/upload-excel', { state: { returnTo } })
               }, 2000)
             }
           } catch (err) {
             console.error('Error checking upload status:', err)
             // Default to upload step if check fails
+            const returnTo = location.state?.returnTo
             setTimeout(() => {
-              navigate('/upload-excel')
+              navigate('/upload-excel', { state: { returnTo } })
             }, 2000)
           }
         }
@@ -138,6 +145,8 @@ function ConnectWhatsApp() {
 
   const handleKeepExistingPhoneNumber = async () => {
     setShowPhoneNumberDialog(false)
+    const returnTo = location.state?.returnTo
+    
     // Check if already connected
     try {
       const statusData = await whatsappService.getConnectionStatus()
@@ -145,20 +154,39 @@ function ConnectWhatsApp() {
         setWhatsappConnected(true)
         setWhatsappPhoneNumber(statusData.phoneNumber)
         
-        // Check if user has already uploaded Excel, if yes skip to send messages
-        try {
-          const uploadStatus = await contactsService.getUploadStatus()
-          if (uploadStatus.hasUploaded && uploadStatus.contactsCount > 0) {
-            // User already uploaded Excel, skip to send messages step
-            navigate('/send-messages')
-          } else {
-            // User hasn't uploaded Excel yet, go to upload step
+        // If this is from campaign flow, continue the campaign flow
+        if (returnTo === 'campaign') {
+          // Check contacts upload status for campaign flow
+          try {
+            const uploadStatus = await contactsService.getUploadStatus()
+            if (uploadStatus.hasUploaded && uploadStatus.contactsCount > 0) {
+              // User already uploaded Excel, go to send messages for campaign
+              navigate('/send-messages-from-contacts', { state: { fromCampaign: true } })
+            } else {
+              // User hasn't uploaded Excel yet, go to upload step
+              navigate('/upload-excel', { state: { returnTo: 'campaign' } })
+            }
+          } catch (err) {
+            console.error('Error checking upload status:', err)
+            // Default to upload step if check fails
+            navigate('/upload-excel', { state: { returnTo: 'campaign' } })
+          }
+        } else {
+          // Regular flow - check if user has already uploaded Excel
+          try {
+            const uploadStatus = await contactsService.getUploadStatus()
+            if (uploadStatus.hasUploaded && uploadStatus.contactsCount > 0) {
+              // User already uploaded Excel, skip to send messages step
+              navigate('/send-messages')
+            } else {
+              // User hasn't uploaded Excel yet, go to upload step
+              navigate('/upload-excel')
+            }
+          } catch (err) {
+            console.error('Error checking upload status:', err)
+            // Default to upload step if check fails
             navigate('/upload-excel')
           }
-        } catch (err) {
-          console.error('Error checking upload status:', err)
-          // Default to upload step if check fails
-          navigate('/upload-excel')
         }
       }
     } catch (err) {

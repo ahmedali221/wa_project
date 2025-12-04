@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext'
 import Package from '../../components/Package'
 import packagesService from '../../services/packagesService'
 import contactsService from '../../services/contactsService'
+import { navigateToCampaign } from '../../utils/campaignFlow'
 import whatsapp_bg from '../../assets/whatsapp.png'
 import image from '../../assets/image.png'
 import scan_qr from '../../assets/scan_qr.png'
@@ -130,20 +131,36 @@ A smart platform for sending and managing WhatsApp messages automatically for bu
             variants={fadeInUp}
           >
             {isAuthenticated && hasSubscription ? (
-              <motion.button
-                onClick={() => navigate('/send-messages-from-contacts')}
-                className="bg-[#1FAF6E] text-white px-8 py-3 rounded-md font-medium hover:bg-[#1a8f5a] transition-colors flex items-center gap-2"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Send New Messages
-              </motion.button>
+              <>
+                <motion.button
+                  onClick={() => navigate('/send-messages-from-contacts')}
+                  className="bg-[#1FAF6E] text-white px-8 py-3 rounded-md font-medium hover:bg-[#1a8f5a] transition-colors flex items-center gap-2"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Send New Messages
+                </motion.button>
+                <motion.button
+                  onClick={() => navigateToCampaign(navigate)}
+                  className="bg-[#1FAF6E] text-white px-8 py-3 rounded-md font-medium hover:bg-[#1a8f5a] transition-colors flex items-center gap-2"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Send New Campaign
+                </motion.button>
+              </>
             ) : (
               <>
             <Link

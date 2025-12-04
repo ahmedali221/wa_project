@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Header from '../../components/Header'
 import Stepper from '../../components/Stepper'
@@ -10,6 +10,7 @@ import upload_arrow from '../../assets/upload.png'
 
 function UploadExcel() {
   const navigate = useNavigate()
+  const location = useLocation()
   const fileInputRef = useRef(null)
   const { whatsappConnected, setExcelData, setUploadedFileName } = useAppContext()
   const [isLoading, setIsLoading] = useState(false)
@@ -56,6 +57,9 @@ function UploadExcel() {
     setSuccessMessage('')
     setIsLoading(true)
 
+    // Check if this is the first time upload BEFORE we set the flag
+    const isFirstTimeUpload = !localStorage.getItem('excelUploadedOnce')
+
     try {
       // Step 1: Parse Excel file in frontend
       const parseResult = await parseExcelFile(file)
@@ -93,6 +97,19 @@ function UploadExcel() {
         (stats.errors > 0 ? `${stats.errors} errors. ` : '') +
         (parseResult.errors && parseResult.errors.length > 0 ? ` (${parseResult.errors.length} parsing errors)` : '')
       )
+
+      // If this is the first time upload, redirect to send messages after a short delay
+      if (isFirstTimeUpload && formattedContacts.length > 0) {
+        // First time upload, redirect to send messages after a short delay
+        setTimeout(() => {
+          navigate('/send-messages-from-contacts', { 
+            state: { 
+              fromExcelUpload: true,
+              contacts: formattedContacts 
+            } 
+          })
+        }, 2000)
+      }
     } catch (err) {
       // Check if error is from backend (already uploaded)
       if (err.status === 409 || err.message?.includes('already uploaded')) {
@@ -713,7 +730,12 @@ function UploadExcel() {
                 // Mark that user has navigated to step 3
                 localStorage.setItem('hasNavigatedToStep3', 'true')
                 setHasNavigatedToStep3(true)
-                navigate('/send-messages')
+                const returnTo = location.state?.returnTo
+                if (returnTo === 'campaign') {
+                  navigate('/send-messages-from-contacts', { state: { fromCampaign: true } })
+                } else {
+                  navigate('/send-messages')
+                }
               }}
               className="bg-[#1FAF6E] text-white px-12 py-4 rounded-md font-bold text-lg hover:bg-[#1a8f5a] transition-colors flex items-center gap-2"
               whileHover={{ scale: 1.05 }}
