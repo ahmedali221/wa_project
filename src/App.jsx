@@ -18,13 +18,6 @@ import YourPlan from './pages/YourPlan/YourPlan'
 import About from './pages/About/About'
 import HowItWorks from './pages/HowItWorks/HowItWorks'
 
-// Admin pages
-import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute'
-import AdminDashboard from './pages/Admin/Dashboard/Dashboard'
-import AdminUsers from './pages/Admin/Users/Users'
-import AdminPlans from './pages/Admin/Plans/Plans'
-import AdminMessages from './pages/Admin/Messages/Messages'
-
 function App() {
   return (
     <AuthProvider>
@@ -48,40 +41,6 @@ function App() {
           <Route path="/payment" element={<Payment />} />
           <Route path="/profile" element={<UserProfile />} />
           <Route path="/your-plan" element={<YourPlan />} />
-
-          {/* Admin routes - SUPER_ADMIN only */}
-          <Route
-            path="/admin/dashboard"
-            element={
-              <ProtectedRoute requiredRole="SUPER_ADMIN">
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/users"
-            element={
-              <ProtectedRoute requiredRole="SUPER_ADMIN">
-                <AdminUsers />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/plans"
-            element={
-              <ProtectedRoute requiredRole="SUPER_ADMIN">
-                <AdminPlans />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/messages"
-            element={
-              <ProtectedRoute requiredRole="SUPER_ADMIN">
-                <AdminMessages />
-              </ProtectedRoute>
-            }
-          />
         </Routes>
       </Router>
       </AppProvider>

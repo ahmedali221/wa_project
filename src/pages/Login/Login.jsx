@@ -28,13 +28,8 @@ function Login() {
 
     try {
       const response = await authService.login(formData)
-      // Check if user is SUPER_ADMIN and redirect accordingly
-      if (response.user?.role === 'SUPER_ADMIN') {
-        navigate('/admin/dashboard')
-      } else {
-        // Regular users go to home
-        navigate('/')
-      }
+      // All users (including SUPER_ADMIN) go to home page
+      navigate('/')
     } catch (err) {
       setError(err.message || 'Login failed. Please try again.')
     } finally {
